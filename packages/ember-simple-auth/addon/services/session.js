@@ -4,8 +4,15 @@ import Service from '@ember/service';
 import Evented from '@ember/object/evented';
 import { getOwner } from '@ember/application';
 import { assert } from '@ember/debug';
+import Configuration from '../configuration';
 
-import { requireAuthentication, triggerAuthentication, prohibitAuthentication, handleSessionAuthenticated } from '../-internals/routing';
+import {
+  requireAuthentication,
+  triggerAuthentication,
+  prohibitAuthentication,
+  handleSessionAuthenticated,
+  handleSessionInvalidated
+} from '../-internals/routing';
 
 const SESSION_DATA_KEY_PREFIX = /^data\./;
 
@@ -150,6 +157,23 @@ export default Service.extend(Evented, {
   },
 
   /**
+    This sets the session up for usage in an appliation. In particular, it
+    installs automatic handling of session events like authentication and
+    invalidation.
+
+    __This method must be called as early as possible in the application's
+    lifecycle, specifically in an instance initializer or the application
+    route's constructor.__
+
+    @method setup
+    @public
+  */
+  setup() {
+    this.get('session').on('authenticationSucceeded', () => this.handleAuthentication(Configuration.routeAfterAuthentication));
+    this.get('session').on('invalidationSucceeded', () => this.handleInvalidation(Configuration.rootURL));
+  },
+
+  /**
     __Authenticates the session with an `authenticator`__ and appropriate
     arguments. The authenticator implements the actual steps necessary to
     authenticate the session (see
@@ -291,5 +315,24 @@ export default Service.extend(Evented, {
   */
   handleAuthentication(routeAfterAuthentication) {
     handleSessionAuthenticated(getOwner(this), routeAfterAuthentication);
+  },
+
+  /**
+    This method is called whenever the session goes from being authenticated to
+    not being authenticated. __It reloads the Ember.js application__ by
+    redirecting the browser to the specified route so that all in-memory data
+    (such as Ember Data stores etc.) gets cleared.
+
+    If the Ember.js application will be used in an environment where the users
+    don't have direct access to any data stored on the client (e.g.
+    [cordova](http://cordova.apache.org)) this action can be overridden to e.g.
+    simply transition to the index route.
+
+    @method handleInvalidation
+    @param {String} routeAfterInvalidation The route to transition to
+    @public
+  */
+  handleInvalidation(routeAfterInvalidation) {
+    handleSessionInvalidated(getOwner(this), routeAfterInvalidation);
   }
 });
