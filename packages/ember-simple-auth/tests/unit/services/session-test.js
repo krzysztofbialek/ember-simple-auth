@@ -5,6 +5,7 @@ import { setOwner } from '@ember/application';
 import Evented from '@ember/object/evented';
 import { next } from '@ember/runloop';
 import EmberObject, { set } from '@ember/object';
+import { registerDeprecationHandler } from '@ember/debug';
 import { describe, beforeEach, it } from 'mocha';
 import { setupTest } from 'ember-mocha';
 import { expect } from 'chai';
@@ -43,25 +44,61 @@ describe('SessionService', () => {
   });
 
   it('forwards the "authenticationSucceeded" event from the session', function(done) {
+    let deprecations = [];
+    registerDeprecationHandler((message, options, next) => {
+      deprecations.push(message);
+
+      next(message, options);
+    });
     let triggered = false;
     sessionService.one('authenticationSucceeded', () => (triggered = true));
     session.trigger('authenticationSucceeded');
 
     next(() => {
       expect(triggered).to.be.true;
+      expect(deprecations).to.have.length(1); // the call to .one above triggers a deprecation but forwarding the event should *not* trigger a deprecation
       done();
     });
   });
 
   it('forwards the "invalidationSucceeded" event from the session', function(done) {
+    let deprecations = [];
+    registerDeprecationHandler((message, options, next) => {
+      deprecations.push(message);
+
+      next(message, options);
+    });
     let triggered = false;
     sessionService.one('invalidationSucceeded', () => (triggered = true));
     session.trigger('invalidationSucceeded');
 
     next(() => {
       expect(triggered).to.be.true;
+      expect(deprecations).to.have.length(1); // the call to .one above triggers a deprecation but forwarding the event should *not* trigger a deprecation
       done();
     });
+  });
+
+  it('deprecates using the "Evented" API', function() {
+    let deprecations = [];
+    registerDeprecationHandler((message, options, next) => {
+      deprecations.push(message);
+
+      next(message, options);
+    });
+
+    let handler = () => {};
+    sessionService.trigger('invalidationSucceeded');
+    sessionService.on('invalidationSucceeded', handler);
+    sessionService.off('invalidationSucceeded', handler);
+    sessionService.has('invalidationSucceeded');
+    sessionService.one('invalidationSucceeded', handler);
+
+    expect(deprecations).to.have.length(5);
+    for (let deprecation of deprecations) {
+      expect(deprecation).to.eq("Ember Simple Auth: The session service's events API is deprecated; to add custom behavior to the authentication or invalidation handling, override the handleAuthentication or handleInvalidation methods.");
+    }
+    expect(true).to.be.true;
   });
 
   describe('isAuthenticated', function() {
